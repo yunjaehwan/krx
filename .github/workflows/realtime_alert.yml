@@ -1,0 +1,39 @@
+name: KRX 장중 거래량 급증 알림
+
+on:
+  schedule:
+    # 매 5분마다, 00:00~06:55 UTC (=09:00~15:55 KST), 평일(월~금)에 실행
+    - cron: "*/5 0-6 * * 1-5"
+  workflow_dispatch: {}   # Actions 탭에서 수동 실행 버튼도 사용 가능
+
+permissions:
+  contents: write   # 알림 상태 파일을 저장소에 다시 커밋하기 위해 필요
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 패키지 설치
+        run: pip install pandas requests finance-datareader
+
+      - name: 스캔 실행
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python krx_realtime_alert.py
+
+      - name: 상태 파일 저장 (중복 알림 방지용)
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add krx_alerts/ || true
+          git diff --cached --quiet || git commit -m "update alert state"
+          git push || true
