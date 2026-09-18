@@ -112,9 +112,12 @@ def build_or_load_baseline(date_str):
     os.makedirs(ALERT_DIR, exist_ok=True)
     path = os.path.join(ALERT_DIR, f"baseline_{date_str}.csv")
     if os.path.exists(path):
-        return pd.read_csv(path, dtype={"종목코드": str}).set_index("종목코드")
+        cached = pd.read_csv(path, dtype={"종목코드": str}).set_index("종목코드")
+        if len(cached) > 0:
+            return cached
+        print("캐시된 후보 목록이 0개라 무효 처리하고 다시 만듭니다...")
 
-    print("전일 기준 스냅샷 생성 중 (하루 첫 실행)...")
+    print("전일 기준 스냅샷 생성 중...")
     df = fdr.StockListing("KRX")
     rename_map = {}
     for col in df.columns:
@@ -132,10 +135,22 @@ def build_or_load_baseline(date_str):
     df = df.rename(columns=rename_map)
     keep = [c for c in ["종목코드", "종목명", "전일종가", "전일거래량", "시가총액"] if c in df.columns]
     df = df[keep].dropna(subset=["종목코드", "전일종가"])
+    print(f"  1) 전체 상장 종목: {len(df)}개")
 
     df["거래대금"] = df["전일거래량"] * df["전일종가"]
-    df = df[df["시가총액"] >= MIN_MARKET_CAP]
+
+    if "시가총액" in df.columns and df["시가총액"].notna().sum() > 0:
+        df = df[df["시가총액"] >= MIN_MARKET_CAP]
+        print(f"  2) 시가총액 {MIN_MARKET_CAP/1e8:.0f}억 이상 필터 후: {len(df)}개")
+    else:
+        print("  2) 시가총액 데이터를 못 가져와서 이 필터는 건너뜁니다 (거래대금만으로 순위 매김)")
+
     df = df.sort_values("거래대금", ascending=False).head(PREFILTER_TOP_N)
+    print(f"  3) 거래대금 상위 {PREFILTER_TOP_N}개로 최종 후보 확정: {len(df)}개")
+
+    if len(df) == 0:
+        print("경고: 최종 후보가 0개입니다. 원본 데이터 소스에 문제가 있을 수 있습니다. 캐시에 저장하지 않고 다음 실행에서 재시도합니다.")
+        return df.set_index("종목코드") if "종목코드" in df.columns else pd.DataFrame()
 
     df.set_index("종목코드").to_csv(path, encoding="utf-8-sig")
     return df.set_index("종목코드")
