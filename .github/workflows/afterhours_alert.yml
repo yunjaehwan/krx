@@ -1,0 +1,40 @@
+name: KRX 애프터마켓 급등 알림
+
+on:
+  schedule:
+    # 매 5분마다, 06:30~11:00 UTC (=15:30~20:00 KST), 평일에 실행
+    - cron: "*/5 6-10 * * 1-5"
+    - cron: "30 6 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 패키지 설치
+        run: pip install pandas requests finance-datareader
+
+      - name: 애프터마켓 스캔 실행
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python krx_afterhours_alert.py
+
+      - name: 상태 파일 저장 (중복 알림 방지용)
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add krx_alerts/ || true
+          git diff --cached --quiet || git commit -m "update afterhours alert state"
+          git push || true
