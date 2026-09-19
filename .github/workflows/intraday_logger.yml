@@ -1,0 +1,36 @@
+name: KRX 장중 가격 스냅샷 기록
+
+on:
+  schedule:
+    # 매 5분마다, 00:00~06:30 UTC (=09:00~15:30 KST), 평일에 실행
+    - cron: "*/5 0-6 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 패키지 설치
+        run: pip install pandas requests finance-datareader
+
+      - name: 스냅샷 기록
+        run: python krx_intraday_logger.py
+
+      - name: 로그 파일 저장
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add krx_intraday_logs/ || true
+          git diff --cached --quiet || git commit -m "update intraday log"
+          git push || true
