@@ -118,6 +118,9 @@ def get_access_token(app_key, app_secret):
     url = f"{KIS_BASE_URL}/oauth2/tokenP"
     body = {"grant_type": "client_credentials", "appkey": app_key, "appsecret": app_secret}
     res = requests.post(url, json=body, timeout=10)
+    if res.status_code != 200:
+        print(f"토큰 발급 실패! 상태코드: {res.status_code}")
+        print(f"응답 내용: {res.text}")
     res.raise_for_status()
     data = res.json()
     token = data["access_token"]
@@ -462,6 +465,16 @@ def run_bot():
 
 
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "--debug-token":
+        app_key, app_secret, cano, prdt_cd = get_kis_credentials()
+        # 캐시 무시하고 강제로 새로 발급 시도
+        token_path = os.path.join(STATE_DIR, "kis_token.json")
+        if os.path.exists(token_path):
+            os.remove(token_path)
+        token = get_access_token(app_key, app_secret)
+        print("토큰 발급 성공!")
+        print(token[:20] + "...")
+        return
     if len(sys.argv) >= 3 and sys.argv[1] == "--debug-price":
         app_key, app_secret, cano, prdt_cd = get_kis_credentials()
         token = get_access_token(app_key, app_secret)
