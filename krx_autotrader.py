@@ -79,8 +79,8 @@ KST = datetime.timezone(datetime.timedelta(hours=9))
 
 KIS_BASE_URL = "https://openapivts.koreainvestment.com:29443" if IS_MOCK else "https://openapi.koreainvestment.com:9443"
 
-TR_BUY = "VTTC0802U" if IS_MOCK else "TTTC0802U"
-TR_SELL = "VTTC0801U" if IS_MOCK else "TTTC0801U"
+TR_BUY = "VTTC0012U" if IS_MOCK else "TTTC0012U"
+TR_SELL = "VTTC0011U" if IS_MOCK else "TTTC0011U"
 TR_BALANCE = "VTTC8434R" if IS_MOCK else "TTTC8434R"
 TR_PRICE = "FHKST01010100"
 
@@ -184,12 +184,13 @@ def kis_get_balance(app_key, app_secret, token, cano, prdt_cd):
 
 
 def kis_place_order(ticker, qty, side, app_key, app_secret, token, cano, prdt_cd):
-    """side: 'buy' 또는 'sell'. 시장가 주문(동시호가에서도 동작)."""
+    """side: 'buy' 또는 'sell'. 시장가 주문, SOR(KRX/NXT 중 유리한 곳 자동 선택)."""
     tr_id = TR_BUY if side == "buy" else TR_SELL
     body = {
         "CANO": cano, "ACNT_PRDT_CD": prdt_cd,
         "PDNO": ticker, "ORD_DVSN": "01",  # 01=시장가
         "ORD_QTY": str(int(qty)), "ORD_UNPR": "0",
+        "EXCG_ID_DVSN_CD": "SOR",  # KRX/NXT 중 더 유리한 곳으로 자동 라우팅
     }
     hashkey = get_hashkey(app_key, app_secret, body)
     headers = {
@@ -372,6 +373,7 @@ def check_and_exit_positions(state, app_key, app_secret, token, cano, prdt_cd, n
                    f"주문결과: {result.get('msg1', result)}")
             print(msg)
             send_telegram(msg)
+            time.sleep(3)  # 모의투자 주문 API 초당 호출 제한 대비
         else:
             remaining.append(pos)
 
@@ -432,6 +434,7 @@ def try_enter_new_positions(state, app_key, app_secret, token, cano, prdt_cd, no
                f"주문결과: {result.get('msg1', result)}")
         print(msg)
         send_telegram(msg)
+        time.sleep(3)  # 모의투자 주문 API 초당 호출 제한 대비
         new_positions.append({
             "ticker": s["ticker"], "name": s["name"],
             "entry_price": s["price"], "peak_price": s["price"],
