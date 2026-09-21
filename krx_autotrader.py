@@ -225,11 +225,19 @@ def is_closing_window(now):
 # 후보 종목 (자가치유 캐시, krx_realtime_alert.py 와 동일 패턴)
 # ============================================================
 
+def _coerce_numeric_baseline(df):
+    for col in ["전일종가", "전일거래량", "시가총액"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df.dropna(subset=[c for c in ["전일종가", "전일거래량"] if c in df.columns])
+
+
 def build_or_load_baseline(date_str):
     os.makedirs(STATE_DIR, exist_ok=True)
     path = os.path.join(STATE_DIR, f"baseline_{date_str}.csv")
     if os.path.exists(path):
         cached = pd.read_csv(path, dtype={"종목코드": str}).set_index("종목코드")
+        cached = _coerce_numeric_baseline(cached)
         if len(cached) > 0:
             return cached
         print("캐시된 후보가 0개라 다시 만듭니다...")
@@ -251,6 +259,7 @@ def build_or_load_baseline(date_str):
     df = df.rename(columns=rename_map)
     keep = [c for c in ["종목코드", "종목명", "전일종가", "전일거래량", "시가총액"] if c in df.columns]
     df = df[keep].dropna(subset=["종목코드", "전일종가"])
+    df = _coerce_numeric_baseline(df)
 
     if "시가총액" in df.columns and df["시가총액"].notna().sum() > 0:
         df = df[df["시가총액"] >= MIN_MARKET_CAP]
