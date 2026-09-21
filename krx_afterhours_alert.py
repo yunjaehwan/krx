@@ -84,11 +84,19 @@ def is_afterhours(now=None):
 # 오늘 정규장 종가/거래량 스냅샷 (하루 1번, 자가치유 캐시)
 # ============================================================
 
+def _coerce_numeric_baseline(df):
+    for col in ["정규장종가", "정규장거래량", "시가총액"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df.dropna(subset=[c for c in ["정규장종가", "정규장거래량"] if c in df.columns])
+
+
 def build_or_load_today_snapshot(date_str):
     os.makedirs(ALERT_DIR, exist_ok=True)
     path = os.path.join(ALERT_DIR, f"afterhours_baseline_{date_str}.csv")
     if os.path.exists(path):
         cached = pd.read_csv(path, dtype={"종목코드": str}).set_index("종목코드")
+        cached = _coerce_numeric_baseline(cached)
         if len(cached) > 0:
             return cached
         print("캐시된 후보 목록이 0개라 무효 처리하고 다시 만듭니다...")
@@ -111,6 +119,7 @@ def build_or_load_today_snapshot(date_str):
     df = df.rename(columns=rename_map)
     keep = [c for c in ["종목코드", "종목명", "정규장종가", "정규장거래량", "시가총액"] if c in df.columns]
     df = df[keep].dropna(subset=["종목코드", "정규장종가"])
+    df = _coerce_numeric_baseline(df)
     print(f"  1) 전체 상장 종목: {len(df)}개")
 
     df["거래대금"] = df["정규장거래량"] * df["정규장종가"]
