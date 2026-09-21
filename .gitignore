@@ -1,0 +1,6 @@
+.env
+krx_intraday_state/
+krx_intraday_logs/
+logs/
+__pycache__/
+*.pyc

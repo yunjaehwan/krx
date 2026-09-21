@@ -1,0 +1,4 @@
+requests>=2.31,<3
+pandas>=2.0,<3
+FinanceDataReader>=0.9,<1
+websocket-client>=1.7,<2
