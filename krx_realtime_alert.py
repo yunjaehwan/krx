@@ -108,11 +108,20 @@ def day_fraction_elapsed(now):
 # 전일 기준 스냅샷 (하루 1번만 생성, 이후 재사용)
 # ============================================================
 
+def _coerce_numeric_baseline(df):
+    """숫자여야 할 컬럼에 이상한 문자(예: '-')가 섞여 있으면 그 종목만 제거."""
+    for col in ["전일종가", "전일거래량", "시가총액"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df.dropna(subset=[c for c in ["전일종가", "전일거래량"] if c in df.columns])
+
+
 def build_or_load_baseline(date_str):
     os.makedirs(ALERT_DIR, exist_ok=True)
     path = os.path.join(ALERT_DIR, f"baseline_{date_str}.csv")
     if os.path.exists(path):
         cached = pd.read_csv(path, dtype={"종목코드": str}).set_index("종목코드")
+        cached = _coerce_numeric_baseline(cached)
         if len(cached) > 0:
             return cached
         print("캐시된 후보 목록이 0개라 무효 처리하고 다시 만듭니다...")
@@ -135,6 +144,7 @@ def build_or_load_baseline(date_str):
     df = df.rename(columns=rename_map)
     keep = [c for c in ["종목코드", "종목명", "전일종가", "전일거래량", "시가총액"] if c in df.columns]
     df = df[keep].dropna(subset=["종목코드", "전일종가"])
+    df = _coerce_numeric_baseline(df)
     print(f"  1) 전체 상장 종목: {len(df)}개")
 
     df["거래대금"] = df["전일거래량"] * df["전일종가"]
