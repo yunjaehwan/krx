@@ -35,6 +35,7 @@ krx_autotrader.py 와 완전히 독립적으로 돌아갑니다 (상태 파일�
 import sys
 import os
 import json
+import time
 import datetime
 
 import requests
@@ -56,17 +57,19 @@ TRAILING_STOP_PCT = 3.0   # 고점 대비 이만큼(%) 빠지면 매도
 TOP_K = 2
 
 MIN_MARKET_CAP = 100_000_000_000
-PREFILTER_TOP_N = 300
+PREFILTER_TOP_N = 200
+
+KIS_REQUEST_DELAY = 0.5   # 종목별 시세 조회 사이 대기(초) - 모의투자 호출 제한 대비
 
 FORCE_CLOSE_TIME = "15:20"  # 이 시각부터는 안 팔린 포지션 강제 정리, 신규 진입도 안 함
 
 STATE_DIR = "./krx_intraday_state"
-HEADERS_NAVER = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
 KIS_BASE_URL = "https://openapivts.koreainvestment.com:29443" if IS_MOCK else "https://openapi.koreainvestment.com:9443"
 TR_BUY = "VTTC0802U" if IS_MOCK else "TTTC0802U"
 TR_SELL = "VTTC0801U" if IS_MOCK else "TTTC0801U"
+TR_PRICE = "FHKST01010100"
 
 
 # ============================================================
@@ -236,21 +239,24 @@ def build_or_load_baseline(date_str):
     return df.set_index("종목코드")
 
 
-def fetch_realtime_quote(ticker):
-    url = f"https://polling.finance.naver.com/api/realtime/domestic/stock/{ticker}"
+def fetch_kis_quote(ticker, app_key, app_secret, token):
+    """한국투자증권 API로 KRX+NXT 통합(UN) 현재가/누적거래량을 조회합니다."""
+    url = f"{KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price"
+    headers = {
+        "content-type": "application/json",
+        "authorization": f"Bearer {token}",
+        "appkey": app_key, "appsecret": app_secret,
+        "tr_id": TR_PRICE,
+    }
+    params = {"FID_COND_MRKT_DIV_CODE": "UN", "FID_INPUT_ISCD": ticker}
     try:
-        resp = requests.get(url, headers=HEADERS_NAVER, timeout=5)
-        data = resp.json()
-        d = data["datas"][0]
-        price = float(str(d.get("closePrice", "")).replace(",", ""))
-        volume = None
-        for key in ("accTradeVolume", "accumulatedTradingVolume", "tradeVolume", "volume"):
-            if key in d and d[key] not in (None, ""):
-                try:
-                    volume = float(str(d[key]).replace(",", ""))
-                    break
-                except (ValueError, TypeError):
-                    continue
+        res = requests.get(url, headers=headers, params=params, timeout=5)
+        data = res.json()
+        output = data.get("output", {})
+        price = float(str(output.get("stck_prpr", "")).replace(",", ""))
+        volume = float(str(output.get("acml_vol", "")).replace(",", ""))
+        if price <= 0:
+            return None, None
         return price, volume
     except Exception:
         return None, None
@@ -297,7 +303,8 @@ def send_telegram(message):
 def check_positions(state, app_key, app_secret, token, cano, prdt_cd, force_close):
     remaining = []
     for pos in state["positions"]:
-        price, _ = fetch_realtime_quote(pos["ticker"])
+        price, _ = fetch_kis_quote(pos["ticker"], app_key, app_secret, token)
+        time.sleep(KIS_REQUEST_DELAY)
         if price is None:
             remaining.append(pos)
             continue
@@ -342,7 +349,8 @@ def try_enter_new_positions(state, app_key, app_secret, token, cano, prdt_cd, no
     for ticker, row in baseline.iterrows():
         if ticker in held_codes:
             continue
-        price, volume = fetch_realtime_quote(ticker)
+        price, volume = fetch_kis_quote(ticker, app_key, app_secret, token)
+        time.sleep(KIS_REQUEST_DELAY)
         if price is None or volume is None:
             continue
         prev_close = row["전일종가"]
