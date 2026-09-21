@@ -1,0 +1,18 @@
+[Unit]
+Description=KRX Realtime Autotrader (mock only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=krxbot
+Group=krxbot
+WorkingDirectory=/opt/krx-bot
+ExecStart=/bin/bash /opt/krx-bot/deploy/run_bot.sh
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/krx-bot/logs/service.log
+StandardError=append:/opt/krx-bot/logs/service.log
+
+[Install]
+WantedBy=multi-user.target
